@@ -5,8 +5,8 @@ Classical ML (XGBoost/LightGBM) project predicting F1 race winners for the
 [BoxBox](https://github.com/NalluriTanavreddy/boxbox) (an F1 data MCP
 server) though it adapts BoxBox's Ergast/Jolpica API client code.
 
-Currently implements the **data ingestion and dataset construction layer**
-only. Feature engineering, modeling, and training are later stages.
+Currently implements the **data ingestion, dataset construction, and
+feature engineering layers**. Modeling and training are the next stage.
 
 ## Regulation eras
 
@@ -45,10 +45,12 @@ drop-in replacement — the original ergast.com shut down after 2024).
 - A summary (row/race counts per season and era, DNF count, any rounds
   that failed to fetch) prints at the end.
 
-Sprint races are out of scope — the dataset only covers main Grand Prix
-qualifying and race sessions.
+Sprint races are out of scope as separate rows — only main Grand Prix
+qualifying and race sessions get a row. A sprint's result (known before the
+main race) is folded in as `sprint_position`/`sprint_points` columns on that
+weekend's main-race rows instead.
 
-## Dataset schema
+## Dataset schema (`race_dataset.parquet`)
 
 One row per (season, round, driver):
 
@@ -66,4 +68,52 @@ One row per (season, round, driver):
 | `finishing_position` | nullable — null for DNFs |
 | `won` | 1 if `finishing_position == 1` |
 | `points`, `status`, `dnf` | race result detail |
+| `sprint_position`, `sprint_points` | that weekend's sprint result; null if no sprint |
 | `missing_qualifying_data` | true if the round had no qualifying data at all |
+
+## Building features
+
+```
+uv run python -m f1_predict.features
+```
+
+Reads `race_dataset.parquet`, adds season-form / constructor-form /
+track-history / racecraft features, sets `category` dtype on
+`driver_id`/`constructor_id`/`circuit_id`/`era` (native categorical
+handling for LightGBM/XGBoost — `season`/`round` stay numeric), assigns a
+chronological train/test split, and writes
+`data/processed/model_dataset.parquet`. Prints per-feature null rates and
+runs structural leakage checks (every rolling/cumulative feature is built
+as `shift(1)` before aggregating, so a row can never see its own race or a
+later one).
+
+### Season form (driver + constructor)
+
+`points_season_so_far` resets every season — 0 at round 1 is real
+information, not missing. The rolling stats (`avg_finish_lastN`,
+`win_rate_lastN`, `podium_rate_lastN` for N in {3, 5}) are **not**
+season-scoped: they carry over the last N races across a season boundary
+*within the same era*, but deliberately reset to null at the 2025→2026
+boundary — 2022-2025 form isn't assumed predictive of 2026 pace under
+all-new regulations, so those early-2026 rows start null and let the
+trees split on that natively rather than smuggling in stale-era signal.
+Constructor form is computed once per (constructor, race) — summed points,
+mean finish across both cars, either car winning/podiuming — then the same
+rolling treatment, so both teammates share identical, leak-free values.
+
+### Track history (driver + constructor, at this circuit)
+
+Unlike season form, this uses **all** prior seasons regardless of era —
+a circuit's characteristics don't change with the power-unit/aero rules,
+so there's no reason to discard 2022-2025 history for a 2026 row. Null on
+a driver's/constructor's first-ever visit to that circuit.
+
+### Racecraft tendency
+
+`driver_racecraft_avg_delta`: career-long average of
+`grid_position - finishing_position` (positive = gains positions), shifted
+so it never includes the current race. Computed career-wide with no
+track-type grouping and no era reset — grid-to-finish racecraft reads as
+more of a driver skill than a car/regulation trait, and with only 26
+circuits across 106 races there isn't enough data to slice by track type
+anyway.
