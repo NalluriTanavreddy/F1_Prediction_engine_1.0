@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+*.egg
+build/
+dist/
+
+# Virtual environments
+.venv/
+venv/
+
+# Environment
+.env
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Tooling
+.ruff_cache/
+.mypy_cache/
+
+# OS
+.DS_Store
+
+# Editors
+.idea/
+.vscode/
+
+# Raw API cache — large, regenerable from data/raw via ingest.py, not needed for review
+data/raw/

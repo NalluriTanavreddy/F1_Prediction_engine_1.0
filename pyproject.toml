@@ -1,0 +1,26 @@
+[project]
+name = "f1-predict"
+version = "0.1.0"
+description = "F1 race winner prediction model (2022-2026 ground-effect and 2026 active-aero eras) — classical ML, portfolio project"
+readme = "README.md"
+authors = [
+    { name = "Tanav Reddy Nalluri", email = "tanavnalluri@gmail.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "httpx>=0.27",
+    "pandas>=2.2",
+    "pyarrow>=17.0",
+]
+
+[project.scripts]
+f1-predict-build-dataset = "f1_predict.build_dataset:main"
+
+[build-system]
+requires = ["uv_build>=0.12.15,<0.13.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+]
