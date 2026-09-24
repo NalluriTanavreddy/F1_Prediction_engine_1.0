@@ -1,5 +1,7 @@
 ![F1 race winner prediction](assets/header-banner.svg)
 
+<img src="assets/race-car.svg" width="100" alt="">
+
 Classical ML (XGBoost/LightGBM) project predicting F1 race winners for the
 2022–2026 seasons. Portfolio project, separate from
 [BoxBox](https://github.com/NalluriTanavreddy/boxbox) (an F1 data MCP
@@ -75,6 +77,8 @@ One row per (season, round, driver):
 
 ![](assets/section-divider.svg)
 
+<img src="assets/helmet.svg" width="70" alt="">
+
 ## Building features
 
 ```
@@ -105,6 +109,8 @@ Constructor form is computed once per (constructor, race) — summed points,
 mean finish across both cars, either car winning/podiuming — then the same
 rolling treatment, so both teammates share identical, leak-free values.
 
+<img src="assets/track-icon.svg" width="80" alt="">
+
 ### Track history (driver + constructor, at this circuit)
 
 Unlike season form, this uses **all** prior seasons regardless of era —
@@ -121,3 +127,5 @@ track-type grouping and no era reset — grid-to-finish racecraft reads as
 more of a driver skill than a car/regulation trait, and with only 26
 circuits across 106 races there isn't enough data to slice by track type
 anyway.
+
+<img src="assets/checkered-flag.svg" width="70" alt="">
