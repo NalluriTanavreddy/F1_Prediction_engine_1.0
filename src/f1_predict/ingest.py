@@ -31,6 +31,7 @@ class RoundData:
     country: str
     qualifying: dict | None = None
     results: dict | None = None
+    sprint: dict | None = None
     fetch_error: str | None = None
 
 
@@ -47,8 +48,18 @@ async def fetch_season_schedule(season: int) -> list[dict]:
     return races
 
 
-async def fetch_round(season: int, round_no: int) -> tuple[dict | None, dict | None]:
-    """Fetch qualifying + race results for one round, in parallel."""
+async def fetch_round(season: int, round_no: int) -> tuple[dict | None, dict | None, dict | None]:
+    """Fetch qualifying + race results + sprint results (if any) for one round.
+
+    Sprint results are known before the main race (sprint runs the day
+    before), so they're a legitimate pre-race feature on that weekend's
+    main-race rows, not a leakage risk.
+
+    Quali + results are fetched in parallel first. Sprint is fetched after,
+    and only once we know the round actually happened (results is non-empty)
+    — that lets us permanently cache "no sprint this weekend" for completed
+    non-sprint rounds instead of re-querying it on every ingestion re-run.
+    """
     quali_data, results_data = await asyncio.gather(
         ergast_get(f"{season}/{round_no}/qualifying"),
         ergast_get(f"{season}/{round_no}/results"),
@@ -57,7 +68,14 @@ async def fetch_round(season: int, round_no: int) -> tuple[dict | None, dict | N
     results_races = results_data["MRData"]["RaceTable"].get("Races", [])
     quali = quali_races[0] if quali_races else None
     results = results_races[0] if results_races else None
-    return quali, results
+
+    sprint = None
+    if results is not None:
+        sprint_data = await ergast_get(f"{season}/{round_no}/sprint", cache_empty=True)
+        sprint_races = sprint_data["MRData"]["RaceTable"].get("Races", [])
+        sprint = sprint_races[0] if sprint_races else None
+
+    return quali, results, sprint
 
 
 async def ingest_all(start_season: int = START_SEASON, end_season: int | None = None) -> IngestResult:
@@ -98,7 +116,7 @@ async def ingest_all(start_season: int = START_SEASON, end_season: int | None = 
                 country=location.get("country", ""),
             )
             try:
-                quali, results = await fetch_round(season, round_no)
+                quali, results, sprint = await fetch_round(season, round_no)
             except Exception as exc:
                 round_data.fetch_error = str(exc)
                 result.failures.append((season, round_no, str(exc)))
@@ -112,6 +130,7 @@ async def ingest_all(start_season: int = START_SEASON, end_season: int | None = 
 
             round_data.qualifying = quali
             round_data.results = results
+            round_data.sprint = sprint
             result.rounds.append(round_data)
 
     return result

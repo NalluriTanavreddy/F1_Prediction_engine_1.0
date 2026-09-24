@@ -107,11 +107,33 @@ def _results_rows(round_data: RoundData) -> list[dict]:
     return rows
 
 
+def _sprint_rows(round_data: RoundData) -> dict[str, dict]:
+    """driver_id -> sprint fields for one round. Empty dict if no sprint that weekend.
+
+    Sprint runs the day before the main race, so its result is known ahead
+    of time — a legitimate pre-race feature, not a leakage risk.
+    """
+    rows: dict[str, dict] = {}
+    if round_data.sprint is None:
+        return rows
+
+    for entry in round_data.sprint.get("SprintResults", []):
+        driver_id = entry["Driver"]["driverId"]
+        position_text = entry.get("positionText", "")
+        sprint_dnf = not position_text.isdigit()
+        rows[driver_id] = {
+            "sprint_position": None if sprint_dnf else int(position_text),
+            "sprint_points": float(entry.get("points", 0) or 0),
+        }
+    return rows
+
+
 def build_race_rows(round_data: RoundData) -> list[dict]:
-    """All per-driver rows for one round, quali + results merged."""
+    """All per-driver rows for one round, quali + results + sprint merged."""
     quali_by_driver = _quali_rows(round_data)
     missing_qualifying = round_data.qualifying is None or not quali_by_driver
     results = _results_rows(round_data)
+    sprint_by_driver = _sprint_rows(round_data)
 
     empty_quali_fields = {
         "quali_position": None,
@@ -121,10 +143,12 @@ def build_race_rows(round_data: RoundData) -> list[dict]:
         "best_quali_time_s": None,
         "gap_to_pole_s": None,
     }
+    empty_sprint_fields = {"sprint_position": None, "sprint_points": None}
 
     rows = []
     for result_row in results:
         quali_fields = quali_by_driver.get(result_row["driver_id"], empty_quali_fields)
+        sprint_fields = sprint_by_driver.get(result_row["driver_id"], empty_sprint_fields)
         row = {
             "season": round_data.season,
             "round": round_data.round,
@@ -136,6 +160,7 @@ def build_race_rows(round_data: RoundData) -> list[dict]:
             "date": round_data.date,
             **result_row,
             **quali_fields,
+            **sprint_fields,
             "missing_qualifying_data": missing_qualifying,
         }
         row["won"] = int(row["finishing_position"] == 1)
@@ -169,10 +194,12 @@ COLUMN_ORDER = [
     "points",
     "status",
     "dnf",
+    "sprint_position",
+    "sprint_points",
     "missing_qualifying_data",
 ]
 
-NULLABLE_INT_COLUMNS = ["quali_position", "grid_position", "finishing_position"]
+NULLABLE_INT_COLUMNS = ["quali_position", "grid_position", "finishing_position", "sprint_position"]
 
 
 def build_dataframe(rounds: list[RoundData]) -> pd.DataFrame:
@@ -206,6 +233,10 @@ def print_summary(df: pd.DataFrame, rounds: list[RoundData], failures: list[tupl
 
     dnf_count = int(df["dnf"].sum())
     print(f"\nDNF rows: {dnf_count} ({dnf_count / len(df):.1%} of all rows)")
+
+    sprint_races = df.loc[df["sprint_position"].notna() | df["sprint_points"].notna(), ["season", "round"]]
+    sprint_races = sprint_races.drop_duplicates()
+    print(f"\nSprint weekends: {len(sprint_races)} of {total_races} races")
 
     missing_quali = df.loc[df["missing_qualifying_data"], ["season", "round", "race_name"]].drop_duplicates()
     if len(missing_quali):

@@ -75,17 +75,32 @@ def _has_no_races(data: dict) -> bool:
     return False
 
 
-async def ergast_get(path: str, limit: int = DEFAULT_LIMIT, *, force_refresh: bool = False) -> dict:
+async def ergast_get(
+    path: str,
+    limit: int = DEFAULT_LIMIT,
+    *,
+    force_refresh: bool = False,
+    cache_empty: bool = False,
+) -> dict:
     """Fetch an Ergast API path (without the .json suffix) as a parsed dict.
 
     Responses are cached indefinitely to disk under data/raw/<path>.json,
     keyed only by path (not by limit — this project always requests full
     result sets).
+
+    By default an empty RaceTable (a round whose session hasn't happened
+    yet) is never cached, so a round that completes between two ingestion
+    runs doesn't stay stuck "missing". Pass cache_empty=True for endpoints
+    where "no data" is itself a permanent, known fact once the round is
+    otherwise complete — e.g. a non-sprint weekend's /sprint.json legitimately
+    and permanently returns no races, and re-fetching that every run just to
+    re-confirm "still no sprint" wastes API calls. Callers are responsible
+    for only setting it once they know the round has actually happened.
     """
     cache_file = _cache_path(path)
     if not force_refresh and cache_file.exists():
         cached = json.loads(cache_file.read_text(encoding="utf-8"))
-        if not _has_no_races(cached):
+        if cache_empty or not _has_no_races(cached):
             return cached
 
     url = f"{ERGAST_BASE_URL}/{path}.json"
@@ -94,7 +109,7 @@ async def ergast_get(path: str, limit: int = DEFAULT_LIMIT, *, force_refresh: bo
     response.raise_for_status()
     data = response.json()
 
-    if not _has_no_races(data):
+    if cache_empty or not _has_no_races(data):
         cache_file.parent.mkdir(parents=True, exist_ok=True)
         cache_file.write_text(json.dumps(data), encoding="utf-8")
     return data
