@@ -1,4 +1,4 @@
-# F1 Race Winner Prediction Engine
+![F1 race winner prediction](assets/header-banner.svg)
 
 Classical ML (XGBoost/LightGBM) project predicting F1 race winners for the
 2022–2026 seasons. Portfolio project, separate from
@@ -50,6 +50,8 @@ qualifying and race sessions get a row. A sprint's result (known before the
 main race) is folded in as `sprint_position`/`sprint_points` columns on that
 weekend's main-race rows instead.
 
+![](assets/section-divider.svg)
+
 ## Dataset schema (`race_dataset.parquet`)
 
 One row per (season, round, driver):
@@ -70,6 +72,8 @@ One row per (season, round, driver):
 | `points`, `status`, `dnf` | race result detail |
 | `sprint_position`, `sprint_points` | that weekend's sprint result; null if no sprint |
 | `missing_qualifying_data` | true if the round had no qualifying data at all |
+
+![](assets/section-divider.svg)
 
 ## Building features
 
