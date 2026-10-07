@@ -7,8 +7,9 @@ Classical ML (XGBoost/LightGBM) project predicting F1 race winners for the
 [BoxBox](https://github.com/NalluriTanavreddy/boxbox) (an F1 data MCP
 server) though it adapts BoxBox's Ergast/Jolpica API client code.
 
-Currently implements the **data ingestion, dataset construction, feature
-engineering, and weather layers**. Modeling and training are the next stage.
+Implements the full pipeline end to end: **data ingestion, dataset
+construction, feature engineering, weather, model training, and
+evaluation.**
 
 ## Regulation eras
 
@@ -167,5 +168,83 @@ have already happened. The eval numbers in `results/metrics.json` measure
 "if weather were known perfectly," not true live-deployment accuracy where
 forecast error is a factor. Standard and accepted for backtesting; worth
 remembering when reading the eval output.
+
+![](assets/section-divider.svg)
+
+## Model training
+
+```
+uv run python -m f1_predict.train
+```
+
+Trains a LightGBM and an XGBoost classifier on `model_dataset.parquet`,
+using the `category`-dtype columns natively (no one-hot encoding) and
+`scale_pos_weight` on both to correct for the ~1-winner-per-~20-car-field
+imbalance. Tuned with a modest Optuna budget (25 trials per model),
+validating on 2025 — the most recent pre-2026 season — so the 2026 test
+set is never touched during tuning. Final models retrain on the full
+2022-2025 training set with the tuned params. Saves
+`models/lightgbm_model.pkl` and `models/xgboost_model.pkl`.
+
+**2026 sample weighting — not applied.** The task called for modestly
+upweighting 2026-era training rows, since 2026 is sparse but the current
+regulation regime. But under the chronological split, *all* 352 2026 rows
+are in the test set and none are in train — there is no 2026-era training
+row to upweight. The alternative (a walk-forward split moving some 2026
+rounds into training) was raised and declined: it would shrink the already
+small 16-race test set for a handful of extra training rows, which isn't a
+good trade at this dataset size. Revisit once a real chunk of 2026 becomes
+historical (e.g. once 2027 is underway).
+
+![](assets/section-divider.svg)
+
+<img src="assets/podium.svg" width="90" alt="">
+
+## Evaluation
+
+```
+uv run python -m f1_predict.evaluate
+```
+
+Scores both models on the 16-race 2026 holdout and writes
+`results/metrics.json`. Top-1/top-3 accuracy are computed per *race*
+(argmax / top-3 of predicted win probability among that race's field) —
+log loss is computed per row and is the metric to trust most, since 16
+races makes top-1/top-3 noisy. The pole-position baseline is reported two
+ways: a plain win rate, and (not explicitly requested, but a fairer
+apples-to-apples comparison) a proper probabilistic baseline — pole sitter
+gets `P(win)` = the training-set pole win rate, the rest of the field
+splits the remainder uniformly — scored with the same log loss as the
+models.
+
+Latest run (108 races through 2026 round 16):
+
+| | LightGBM | XGBoost | Pole baseline |
+| --- | --- | --- | --- |
+| Top-1 accuracy | 68.8% (11/16) | 37.5% (6/16) | 68.8%* |
+| Top-3 accuracy | 87.5% (14/16) | 75.0% (12/16) | — |
+| Log loss | **0.0849** | 0.1298 | 0.1040 |
+
+\* pole win rate on the test set itself; not a top-1 "accuracy" in the same
+sense, but the natural number to compare top-1 against.
+
+**Recommendation: keep LightGBM.** It beats the pole baseline on every
+metric; XGBoost doesn't, even after its own tuning budget — on this
+dataset size XGBoost's default-ish tree structure evidently needs more
+data or a wider search than 25 trials to catch up. An ensemble isn't worth
+it: averaging in a model that underperforms the baseline would only drag
+LightGBM down, not complement it. `models/model.pkl` is a copy of
+whichever model wins on test log loss (currently LightGBM), so a
+prediction interface only ever needs to load one file.
+
+**Racecraft-tendency sanity check**: `driver_racecraft_avg_delta` ranks
+4th of 36 features by importance in LightGBM — high enough to ask whether
+it's leaning on pre-2026 driver behavior that doesn't transfer to the new
+regs (exactly the risk flagged when this feature was built: it's
+career-long and deliberately not era-reset). The reassuring sign is that
+the model still clearly beats the pole baseline on the 2026 test set
+despite that — if this feature's signal didn't transfer, test performance
+would be the place it would show up. One 16-race season isn't a strong
+guarantee either way, though; worth re-checking as more 2026+ data arrives.
 
 <img src="assets/checkered-flag.svg" width="70" alt="">

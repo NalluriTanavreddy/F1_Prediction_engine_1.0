@@ -1,0 +1,130 @@
+{
+  "pole_baseline": {
+    "win_rate_train": 0.5760869565217391,
+    "win_rate_test": 0.6875,
+    "log_loss_test": 0.10403801885135412
+  },
+  "models": {
+    "lightgbm": {
+      "model": "lightgbm",
+      "params": {
+        "n_estimators": 180,
+        "num_leaves": 10,
+        "learning_rate": 0.06340974981791966,
+        "min_child_samples": 9,
+        "subsample": 0.8291171588029078,
+        "colsample_bytree": 0.6140916373839295,
+        "reg_lambda": 8.121245562000139
+      },
+      "top1_accuracy": 0.6875,
+      "top3_accuracy": 0.875,
+      "log_loss": 0.08493952711263608,
+      "feature_importance_top10": [
+        {
+          "feature": "driver_circuit_avg_finish",
+          "importance": 122.0
+        },
+        {
+          "feature": "driver_points_season_so_far",
+          "importance": 116.0
+        },
+        {
+          "feature": "gap_to_pole_s",
+          "importance": 110.0
+        },
+        {
+          "feature": "driver_racecraft_avg_delta",
+          "importance": 105.0
+        },
+        {
+          "feature": "driver_avg_finish_last5",
+          "importance": 86.0
+        },
+        {
+          "feature": "constructor_avg_finish_last3",
+          "importance": 83.0
+        },
+        {
+          "feature": "circuit_id",
+          "importance": 80.0
+        },
+        {
+          "feature": "driver_avg_finish_last3",
+          "importance": 78.0
+        },
+        {
+          "feature": "driver_id",
+          "importance": 74.0
+        },
+        {
+          "feature": "constructor_circuit_avg_finish",
+          "importance": 62.0
+        }
+      ],
+      "racecraft_tendency_rank": "driver_racecraft_avg_delta ranks 4 of 36 by importance"
+    },
+    "xgboost": {
+      "model": "xgboost",
+      "params": {
+        "n_estimators": 274,
+        "max_depth": 7,
+        "learning_rate": 0.036217198729439015,
+        "min_child_weight": 5,
+        "subsample": 0.7082044435722761,
+        "colsample_bytree": 0.9844960290674808,
+        "reg_lambda": 0.017312701833194836
+      },
+      "top1_accuracy": 0.375,
+      "top3_accuracy": 0.75,
+      "log_loss": 0.12981373071670532,
+      "feature_importance_top10": [
+        {
+          "feature": "quali_position",
+          "importance": 0.28749433159828186
+        },
+        {
+          "feature": "gap_to_pole_s",
+          "importance": 0.19334857165813446
+        },
+        {
+          "feature": "driver_podium_rate_last5",
+          "importance": 0.06490419805049896
+        },
+        {
+          "feature": "sprint_position",
+          "importance": 0.048803627490997314
+        },
+        {
+          "feature": "driver_podium_rate_last3",
+          "importance": 0.038991719484329224
+        },
+        {
+          "feature": "driver_id",
+          "importance": 0.03535860776901245
+        },
+        {
+          "feature": "constructor_win_rate_last3",
+          "importance": 0.027486981824040413
+        },
+        {
+          "feature": "circuit_id",
+          "importance": 0.025121508166193962
+        },
+        {
+          "feature": "driver_win_rate_last5",
+          "importance": 0.023730719462037086
+        },
+        {
+          "feature": "grid_position",
+          "importance": 0.022537779062986374
+        }
+      ],
+      "racecraft_tendency_rank": "driver_racecraft_avg_delta ranks 12 of 36 by importance"
+    }
+  },
+  "recommendation": {
+    "production_model": "lightgbm",
+    "reason": "lower log loss on the 2026 test set \u2014 the more robust metric given only 16 test races"
+  },
+  "weather_eval_caveat": "Test-set weather uses actual historical observations (races already happened), not a pre-race forecast. These metrics measure accuracy if weather were known perfectly, not true live-deployment accuracy."
+}
