@@ -228,6 +228,10 @@ FEATURE_COLUMNS = [
     "driver_racecraft_avg_delta",
     "sprint_position",
     "sprint_points",
+    "weather_temp_max_c",
+    "weather_precip_mm",
+    "weather_wind_speed_max_kph",
+    "weather_rain_probability_pct",
 ]
 
 

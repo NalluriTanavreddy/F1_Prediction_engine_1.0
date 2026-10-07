@@ -15,6 +15,7 @@ dependencies = [
 
 [project.scripts]
 f1-predict-build-dataset = "f1_predict.build_dataset:main"
+f1-predict-weather = "f1_predict.weather:main"
 f1-predict-build-features = "f1_predict.features:main"
 
 [build-system]

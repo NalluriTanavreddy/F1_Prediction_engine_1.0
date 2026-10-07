@@ -29,6 +29,8 @@ class RoundData:
     circuit_id: str
     circuit_name: str
     country: str
+    latitude: float | None = None
+    longitude: float | None = None
     qualifying: dict | None = None
     results: dict | None = None
     sprint: dict | None = None
@@ -114,6 +116,8 @@ async def ingest_all(start_season: int = START_SEASON, end_season: int | None = 
                 circuit_id=circuit.get("circuitId", ""),
                 circuit_name=circuit.get("circuitName", ""),
                 country=location.get("country", ""),
+                latitude=float(location["lat"]) if location.get("lat") else None,
+                longitude=float(location["long"]) if location.get("long") else None,
             )
             try:
                 quali, results, sprint = await fetch_round(season, round_no)
