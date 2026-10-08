@@ -8,12 +8,14 @@ authors = [
 ]
 requires-python = ">=3.12"
 dependencies = [
+    "fastapi>=0.142.4",
     "httpx>=0.27",
     "lightgbm>=4.7.0",
     "optuna>=5.0.0",
     "pandas>=2.2",
     "pyarrow>=17.0",
     "scikit-learn>=1.9.1",
+    "uvicorn[standard]>=0.54.0",
     "xgboost>=3.4.1",
 ]
 
@@ -24,6 +26,8 @@ f1-predict-build-features = "f1_predict.features:main"
 f1-predict-train = "f1_predict.train:main"
 f1-predict-evaluate = "f1_predict.evaluate:main"
 f1-predict-validate = "f1_predict.validate:main"
+f1-predict-predict = "f1_predict.predict:main"
+f1-predict-skew-check = "f1_predict.skew_check:main"
 
 [build-system]
 requires = ["uv_build>=0.12.15,<0.13.0"]
