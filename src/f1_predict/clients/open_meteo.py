@@ -74,8 +74,8 @@ def _cache_path(kind: str, latitude: float, longitude: float, date: str) -> Path
     return RAW_DATA_DIR / kind / f"{latitude:.4f}_{longitude:.4f}_{date}.json"
 
 
-async def _cached_get(cache_file: Path, url: str, params: dict) -> dict:
-    if cache_file.exists():
+async def _cached_get(cache_file: Path, url: str, params: dict, *, force_refresh: bool = False) -> dict:
+    if not force_refresh and cache_file.exists():
         return json.loads(cache_file.read_text(encoding="utf-8"))
 
     client = get_client()
@@ -121,13 +121,20 @@ async def fetch_historical_weather(latitude: float, longitude: float, date: str)
     }
 
 
-async def fetch_forecast_weather(latitude: float, longitude: float, date: str) -> dict:
-    """A real pre-race forecast for a future date, from Open-Meteo's forecast API.
+async def fetch_forecast_weather(latitude: float, longitude: float, date: str, *, force_refresh: bool = False) -> dict:
+    """A real pre-race forecast for a date, from Open-Meteo's forecast API.
 
-    Open-Meteo only forecasts ~16 days out; a date further out than that
-    makes the API itself reject the request (HTTPStatusError via
-    raise_for_status), which propagates to the caller. Call this close to
-    the race weekend, not far in advance.
+    The forecast API's allowed date range is a rolling window (observed:
+    roughly today-3-months through today+16-days, both ends moving with
+    the current date) — a date outside it makes the API reject the request
+    (HTTPStatusError via raise_for_status), which propagates to the caller.
+
+    force_refresh defaults to False for interactive/dev reruns (the disk
+    cache under data/raw/weather/forecast/ saves re-fetching the same
+    round while iterating), but a forecast changes as the race approaches
+    — unlike fetch_historical_weather's immutable actuals, a cached
+    forecast can go stale. The live prediction path must pass
+    force_refresh=True to always get the latest forecast.
     """
     cache_file = _cache_path("forecast", latitude, longitude, date)
     data = await _cached_get(
@@ -141,6 +148,7 @@ async def fetch_forecast_weather(latitude: float, longitude: float, date: str) -
             "daily": FORECAST_DAILY_VARS,
             "timezone": "auto",
         },
+        force_refresh=force_refresh,
     )
     return {
         "temp_max_c": _first_daily_value(data, "temperature_2m_max"),

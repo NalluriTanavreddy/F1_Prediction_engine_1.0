@@ -50,6 +50,40 @@ async def fetch_season_schedule(season: int) -> list[dict]:
     return races
 
 
+async def fetch_race_schedule_entry(season: int, round_no: int) -> dict | None:
+    """Return just one round's schedule entry (name, date, circuit), or None if it doesn't exist.
+
+    Used by the live prediction path, which needs a single round's metadata
+    without pulling the whole season — e.g. to check a target round exists
+    before trying to fetch qualifying for it.
+    """
+    data = await ergast_get(f"{season}/{round_no}")
+    races = data["MRData"]["RaceTable"].get("Races", [])
+    return races[0] if races else None
+
+
+def round_data_shell(season: int, race: dict) -> "RoundData":
+    """Build a RoundData with only schedule fields populated (no quali/results/sprint yet).
+
+    Factored out of ingest_all's loop so the live prediction path (which
+    fetches one round's schedule entry directly, not a full season) can
+    build the same shell without duplicating this field mapping.
+    """
+    circuit = race.get("Circuit", {})
+    location = circuit.get("Location", {})
+    return RoundData(
+        season=season,
+        round=int(race["round"]),
+        race_name=race.get("raceName", ""),
+        date=race.get("date", ""),
+        circuit_id=circuit.get("circuitId", ""),
+        circuit_name=circuit.get("circuitName", ""),
+        country=location.get("country", ""),
+        latitude=float(location["lat"]) if location.get("lat") else None,
+        longitude=float(location["long"]) if location.get("long") else None,
+    )
+
+
 async def fetch_round(season: int, round_no: int) -> tuple[dict | None, dict | None, dict | None]:
     """Fetch qualifying + race results + sprint results (if any) for one round.
 
@@ -106,19 +140,7 @@ async def ingest_all(start_season: int = START_SEASON, end_season: int | None = 
             if race_date and race_date > today.isoformat():
                 continue
 
-            circuit = race.get("Circuit", {})
-            location = circuit.get("Location", {})
-            round_data = RoundData(
-                season=season,
-                round=round_no,
-                race_name=race.get("raceName", ""),
-                date=race_date,
-                circuit_id=circuit.get("circuitId", ""),
-                circuit_name=circuit.get("circuitName", ""),
-                country=location.get("country", ""),
-                latitude=float(location["lat"]) if location.get("lat") else None,
-                longitude=float(location["long"]) if location.get("long") else None,
-            )
+            round_data = round_data_shell(season, race)
             try:
                 quali, results, sprint = await fetch_round(season, round_no)
             except Exception as exc:
