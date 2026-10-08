@@ -8,8 +8,8 @@ Classical ML (XGBoost/LightGBM) project predicting F1 race winners for the
 server) though it adapts BoxBox's Ergast/Jolpica API client code.
 
 Implements the full pipeline end to end: **data ingestion, dataset
-construction, feature engineering, weather, model training, and
-evaluation.**
+construction, feature engineering, weather, model training, evaluation,
+and a live prediction interface (API + CLI).**
 
 ## Regulation eras
 
@@ -325,5 +325,127 @@ row of the current, all-historical dataset — a column that's always null
 in training carries no signal to learn from. `weather_precip_mm` already
 exists in both the historical-actual and forecast paths and covers the
 same "how much rain" signal, so there was nothing to substitute it with.
+
+![](assets/section-divider.svg)
+
+## Prediction interface
+
+**LightGBM ties the pole-position baseline on top-1 accuracy (68.8%) and
+improves log loss (0.0738 vs 0.1040) — checked against only 16 test
+races.** Read that as "roughly as good as always picking pole, with
+better-calibrated probabilities across the rest of the field," not as a
+model that reliably beats an expert human's gut call on who wins. See
+Evaluation/Validation above for the full picture, including that the
+model's top-1 picks agree with the literal pole sitter in 14 of those 16
+races.
+
+### Live feature path
+
+`f1_predict.live_features.build_live_feature_rows(season, round)` builds
+a prediction-ready feature row for every driver using only
+post-qualifying information: qualifying results from Jolpica, the
+existing season-form/constructor-form/track-history/racecraft code
+**completely unchanged**, the sprint result if one has happened, and
+weather from Open-Meteo's live forecast API (never the historical
+archive). It works by appending "stub" rows — real identifiers and
+qualifying data, unknown result — to the real race history and re-running
+the exact same batch feature pipeline (`features.build_features`) on the
+combined frame. That works without any changes to the feature code
+because every rolling/cumulative feature there is built as `shift(1)`
+before aggregating, so a row's own unknown result is never read to
+compute its own feature, and since the stub row is chronologically last,
+nothing else depends on it either.
+
+The one feature that's genuinely approximated: `grid_position`. The
+model was trained on the real, post-penalty starting grid, which isn't
+published until shortly before the race — right after qualifying, the
+best available estimate is `quali_position` (no penalty applied yet).
+
+### Skew check
+
+`uv run python -m f1_predict.skew_check` runs the live path on completed
+2026 rounds (ignoring their real results) and diffs the output against
+the offline `model_dataset.parquet` for the same round — feature by
+feature, and the resulting predicted probabilities. Checked against
+rounds 14, 15, and 16:
+
+- **No unexpected column differs in any of the three rounds** — direct
+  empirical confirmation that the feature code has no hidden dependency
+  on the target race's own result.
+- `weather_*` differs every time, as expected (forecast vs. archive).
+  The forecast is usually close (e.g. round 14: 31.9°C live vs 32.4°C
+  actual) but not always (round 15: 32.1 km/h forecast wind vs 22.7 km/h
+  actual) — ordinary forecast error.
+- `grid_position` differs on some rows in every round (4/20, 9/22, 14/22)
+  — real grid penalties the quali-position estimate can't know about.
+- Resulting win-probability differences are small (max 0.0039-0.0310
+  across the three rounds) and never changed the top pick.
+- Round 14 surfaced a real edge case along the way: two drivers
+  (`bearman`, `stroll`) appear in that race's results but not in its
+  qualifying — a late substitution. The live path's roster comes from
+  qualifying, so it doesn't see them; `skew_check.py` reports this
+  explicitly as a roster mismatch rather than silently dropping or
+  crashing on it.
+
+### API
+
+```
+uv run uvicorn f1_predict.api:app --reload
+```
+
+- `GET /health`
+- `GET /predict/{season}/{round}` — 404 with a clear message if that
+  round doesn't exist yet or has no published qualifying session.
+
+Sample response (`GET /predict/2026/16`, truncated to the top 5 drivers):
+
+```json
+{
+  "season": 2026,
+  "round": 16,
+  "race_name": "Bahrain Grand Prix in Malaysia",
+  "circuit_id": "sepang",
+  "drivers": [
+    { "driver_id": "max_verstappen", "driver_code": "VER", "driver_name": "Max Verstappen", "constructor_id": "red_bull", "grid_position": 1, "win_probability": 0.8772 },
+    { "driver_id": "antonelli", "driver_code": "ANT", "driver_name": "Andrea Kimi Antonelli", "constructor_id": "mercedes", "grid_position": 4, "win_probability": 0.0633 },
+    { "driver_id": "hamilton", "driver_code": "HAM", "driver_name": "Lewis Hamilton", "constructor_id": "ferrari", "grid_position": 2, "win_probability": 0.0212 },
+    { "driver_id": "russell", "driver_code": "RUS", "driver_name": "George Russell", "constructor_id": "mercedes", "grid_position": 8, "win_probability": 0.0177 },
+    { "driver_id": "hadjar", "driver_code": "HAD", "driver_name": "Isack Hadjar", "constructor_id": "red_bull", "grid_position": 3, "win_probability": 0.013 }
+  ],
+  "metadata": {
+    "model_name": "LGBMClassifier",
+    "model_trained_through_season": 2025,
+    "prediction_generated_at": "2026-10-08T03:42:40.331832+00:00",
+    "weather_source": ["forecast"]
+  }
+}
+```
+
+`win_probability` is normalized to sum to 1 across the full driver list
+for that race (not shown truncated above).
+
+### CLI
+
+```
+uv run python -m f1_predict.predict --season 2026 --round 17
+```
+
+Prints the same JSON `predict_race` builds for the API, to stdout.
+
+### Tests
+
+```
+uv run pytest
+```
+
+`tests/test_live_features.py` and `tests/test_api.py` mock every network
+call (`ergast_get`, `fetch_forecast_weather`) and run against the real
+committed `models/model.pkl` and `data/processed/race_dataset.parquet` —
+no live network access needed to run the suite. One thing worth knowing
+if you add a test that mocks `ergast_get`: `fetch_race_schedule_entry`
+lives in `f1_predict.ingest` and uses *its own* imported reference to it,
+separate from `f1_predict.live_features`'s — patching only one leaves the
+other hitting the real network, which is exactly the bug the mock-target
+comment in `tests/conftest.py` exists to prevent happening again.
 
 <img src="assets/checkered-flag.svg" width="70" alt="">
