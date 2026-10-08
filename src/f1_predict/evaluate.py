@@ -10,6 +10,15 @@ Top-1/top-3 accuracy are computed per RACE (argmax / top-3 of predicted
 win probability among that race's drivers), not per row — the models are
 trained as per-row binary classifiers (as asked), but "did we pick the
 winner" is inherently a per-race question.
+
+Log loss is computed on probabilities normalized to sum to 1 within each
+race (see normalize_per_race) — the raw per-row predict_proba output
+isn't constrained to do that, since the model has no notion of "race" at
+fit time, while the pole baseline below *is* built to sum to 1 per race.
+Comparing the model's raw, unnormalized log loss against that baseline
+would be comparing two different things; log_loss_raw_unnormalized is
+kept in the output for transparency but log_loss (normalized) is the
+number to trust against the pole baseline.
 """
 
 import json
@@ -34,6 +43,24 @@ def predict_proba(bundle: dict, df: pd.DataFrame) -> pd.Series:
     X, _ = prepare_X_y(df)
     proba = bundle["model"].predict_proba(X)[:, 1]
     return pd.Series(proba, index=df.index)
+
+
+def normalize_per_race(df: pd.DataFrame, proba_col: str, season_round_cols: tuple[str, str] = ("season", "round")) -> pd.Series:
+    """Rescale predicted probabilities so each race's field sums to 1.
+
+    The model is trained as an independent per-row binary classifier (one
+    win/not-win probability per driver), so nothing forces a race's raw
+    probabilities to sum to 1 the way a proper per-race probability
+    distribution would. The pole baseline *is* constructed to sum to 1
+    (pole gets the pole rate, the rest split the remainder), so comparing
+    the model's raw log loss against it isn't quite apples-to-apples.
+    Normalizing per race fixes that for log loss; it doesn't change
+    top-1/top-3 since those only depend on the within-race ranking, which
+    a per-race rescaling preserves.
+    """
+    season_col, round_col = season_round_cols
+    sums = df.groupby([season_col, round_col])[proba_col].transform("sum")
+    return df[proba_col] / sums
 
 
 def top_n_accuracy(df: pd.DataFrame, proba_col: str, n: int) -> float:
@@ -91,10 +118,12 @@ def evaluate_model(name: str, train_df: pd.DataFrame, test_df: pd.DataFrame) -> 
     bundle = load_model(name)
     test_df = test_df.copy()
     test_df["proba"] = predict_proba(bundle, test_df)
+    test_df["proba_norm"] = normalize_per_race(test_df, "proba")
 
     top1 = top_n_accuracy(test_df, "proba", 1)
     top3 = top_n_accuracy(test_df, "proba", 3)
-    loss = log_loss(test_df["won"], test_df["proba"])
+    raw_loss = log_loss(test_df["won"], test_df["proba"])
+    loss = log_loss(test_df["won"], test_df["proba_norm"])
     importance = feature_importance(bundle, name)
 
     return {
@@ -103,6 +132,7 @@ def evaluate_model(name: str, train_df: pd.DataFrame, test_df: pd.DataFrame) -> 
         "top1_accuracy": top1,
         "top3_accuracy": top3,
         "log_loss": loss,
+        "log_loss_raw_unnormalized": raw_loss,
         "feature_importance_top10": importance[:10],
         "racecraft_tendency_rank": racecraft_rank_note(importance),
     }
@@ -136,7 +166,8 @@ def main() -> None:
         top3_hits = int(round(result["top3_accuracy"] * n_test_races))
         print(f"  Top-1 accuracy: {result['top1_accuracy']:.1%}  ({top1_hits}/{n_test_races} races)")
         print(f"  Top-3 accuracy: {result['top3_accuracy']:.1%}  ({top3_hits}/{n_test_races} races)")
-        print(f"  Log loss:       {result['log_loss']:.4f}  (pole baseline: {pole_logloss_test:.4f})")
+        print(f"  Log loss (per-race normalized): {result['log_loss']:.4f}  (pole baseline: {pole_logloss_test:.4f})")
+        print(f"  Log loss (raw, unnormalized):   {result['log_loss_raw_unnormalized']:.4f}  (not comparable to the baseline above)")
         print(f"  {result['racecraft_tendency_rank']}")
         print("  Top 5 features:")
         for item in result["feature_importance_top10"][:5]:

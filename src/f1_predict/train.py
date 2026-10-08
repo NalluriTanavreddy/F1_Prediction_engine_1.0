@@ -14,6 +14,16 @@ set and none are in train (see README) — there is no 2026-era training
 row to upweight. Confirmed with the user rather than moving 2026 races
 into a walk-forward split, which would have shrunk the already-small
 16-race test set. Revisit once a real chunk of 2026 becomes historical.
+
+weather_rain_probability_pct is deliberately excluded from the feature
+list: it's forecast-only (see clients/open_meteo.py), so every row in the
+current, all-historical dataset has it null. A column that's 100% null in
+training carries zero signal and the model can't learn anything about its
+future, populated behavior from training data that never has it populated.
+weather_precip_mm already exists in both the historical-actual and
+forecast paths and captures the same "how much rain" signal, so dropping
+rain_probability_pct rather than inventing a historical substitute for it
+loses nothing.
 """
 
 import pickle
@@ -64,7 +74,6 @@ NUMERIC_FEATURES = [
     "weather_temp_max_c",
     "weather_precip_mm",
     "weather_wind_speed_max_kph",
-    "weather_rain_probability_pct",
 ]
 CATEGORICAL_FEATURES = ["driver_id", "constructor_id", "circuit_id", "era"]
 FEATURE_COLUMNS = NUMERIC_FEATURES + CATEGORICAL_FEATURES

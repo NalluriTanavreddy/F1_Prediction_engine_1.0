@@ -23,6 +23,7 @@ f1-predict-weather = "f1_predict.weather:main"
 f1-predict-build-features = "f1_predict.features:main"
 f1-predict-train = "f1_predict.train:main"
 f1-predict-evaluate = "f1_predict.evaluate:main"
+f1-predict-validate = "f1_predict.validate:main"
 
 [build-system]
 requires = ["uv_build>=0.12.15,<0.13.0"]

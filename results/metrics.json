@@ -18,7 +18,8 @@
       },
       "top1_accuracy": 0.6875,
       "top3_accuracy": 0.875,
-      "log_loss": 0.08493952711263608,
+      "log_loss": 0.07380592766427095,
+      "log_loss_raw_unnormalized": 0.08493952711263608,
       "feature_importance_top10": [
         {
           "feature": "driver_circuit_avg_finish",
@@ -61,65 +62,66 @@
           "importance": 62.0
         }
       ],
-      "racecraft_tendency_rank": "driver_racecraft_avg_delta ranks 4 of 36 by importance"
+      "racecraft_tendency_rank": "driver_racecraft_avg_delta ranks 4 of 35 by importance"
     },
     "xgboost": {
       "model": "xgboost",
       "params": {
-        "n_estimators": 274,
-        "max_depth": 7,
-        "learning_rate": 0.036217198729439015,
-        "min_child_weight": 5,
-        "subsample": 0.7082044435722761,
-        "colsample_bytree": 0.9844960290674808,
-        "reg_lambda": 0.017312701833194836
+        "n_estimators": 186,
+        "max_depth": 8,
+        "learning_rate": 0.04432850607075789,
+        "min_child_weight": 1,
+        "subsample": 0.8011972512649094,
+        "colsample_bytree": 0.9299820475646496,
+        "reg_lambda": 1.054263619695554
       },
-      "top1_accuracy": 0.375,
-      "top3_accuracy": 0.75,
-      "log_loss": 0.12981373071670532,
+      "top1_accuracy": 0.5,
+      "top3_accuracy": 0.6875,
+      "log_loss": 0.11134717613458633,
+      "log_loss_raw_unnormalized": 0.12638257443904877,
       "feature_importance_top10": [
         {
           "feature": "quali_position",
-          "importance": 0.28749433159828186
+          "importance": 0.28798288106918335
         },
         {
           "feature": "gap_to_pole_s",
-          "importance": 0.19334857165813446
-        },
-        {
-          "feature": "driver_podium_rate_last5",
-          "importance": 0.06490419805049896
-        },
-        {
-          "feature": "sprint_position",
-          "importance": 0.048803627490997314
+          "importance": 0.24023078382015228
         },
         {
           "feature": "driver_podium_rate_last3",
-          "importance": 0.038991719484329224
+          "importance": 0.04562227427959442
+        },
+        {
+          "feature": "sprint_position",
+          "importance": 0.03964754939079285
+        },
+        {
+          "feature": "driver_podium_rate_last5",
+          "importance": 0.03877785801887512
         },
         {
           "feature": "driver_id",
-          "importance": 0.03535860776901245
-        },
-        {
-          "feature": "constructor_win_rate_last3",
-          "importance": 0.027486981824040413
+          "importance": 0.03343804553151131
         },
         {
           "feature": "circuit_id",
-          "importance": 0.025121508166193962
-        },
-        {
-          "feature": "driver_win_rate_last5",
-          "importance": 0.023730719462037086
+          "importance": 0.028021590784192085
         },
         {
           "feature": "grid_position",
-          "importance": 0.022537779062986374
+          "importance": 0.02377733588218689
+        },
+        {
+          "feature": "sprint_points",
+          "importance": 0.022791076451539993
+        },
+        {
+          "feature": "constructor_id",
+          "importance": 0.017046310007572174
         }
       ],
-      "racecraft_tendency_rank": "driver_racecraft_avg_delta ranks 12 of 36 by importance"
+      "racecraft_tendency_rank": "driver_racecraft_avg_delta ranks 14 of 35 by importance"
     }
   },
   "recommendation": {

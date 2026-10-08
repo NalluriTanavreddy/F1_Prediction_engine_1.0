@@ -208,37 +208,43 @@ uv run python -m f1_predict.evaluate
 
 Scores both models on the 16-race 2026 holdout and writes
 `results/metrics.json`. Top-1/top-3 accuracy are computed per *race*
-(argmax / top-3 of predicted win probability among that race's field) —
-log loss is computed per row and is the metric to trust most, since 16
-races makes top-1/top-3 noisy. The pole-position baseline is reported two
-ways: a plain win rate, and (not explicitly requested, but a fairer
-apples-to-apples comparison) a proper probabilistic baseline — pole sitter
-gets `P(win)` = the training-set pole win rate, the rest of the field
-splits the remainder uniformly — scored with the same log loss as the
-models.
+(argmax / top-3 of predicted win probability among that race's field).
+Log loss is computed on probabilities **normalized to sum to 1 within
+each race** — the model is trained as an independent per-row binary
+classifier, so raw `predict_proba` output isn't constrained to sum to 1
+per race the way a proper per-race probability distribution is (see
+"Validation" below); the raw, unnormalized log loss is also kept in
+`results/metrics.json` for transparency but isn't the number to trust.
+The pole-position baseline is reported two ways: a plain win rate, and
+(not explicitly requested, but a fairer apples-to-apples comparison) a
+proper probabilistic baseline — pole sitter gets `P(win)` = the
+training-set pole win rate, the rest of the field splits the remainder
+uniformly, which by construction already sums to 1 per race.
 
 Latest run (108 races through 2026 round 16):
 
 | | LightGBM | XGBoost | Pole baseline |
 | --- | --- | --- | --- |
-| Top-1 accuracy | 68.8% (11/16) | 37.5% (6/16) | 68.8%* |
-| Top-3 accuracy | 87.5% (14/16) | 75.0% (12/16) | — |
-| Log loss | **0.0849** | 0.1298 | 0.1040 |
+| Top-1 accuracy | 68.8% (11/16) | 50.0% (8/16) | 68.8%* |
+| Top-3 accuracy | 87.5% (14/16) | 68.8% (11/16) | — |
+| Log loss (per-race normalized) | **0.0738** | 0.1113 | 0.1040 |
 
 \* pole win rate on the test set itself; not a top-1 "accuracy" in the same
 sense, but the natural number to compare top-1 against.
 
-**Recommendation: keep LightGBM.** It beats the pole baseline on every
-metric; XGBoost doesn't, even after its own tuning budget — on this
-dataset size XGBoost's default-ish tree structure evidently needs more
-data or a wider search than 25 trials to catch up. An ensemble isn't worth
-it: averaging in a model that underperforms the baseline would only drag
-LightGBM down, not complement it. `models/model.pkl` is a copy of
-whichever model wins on test log loss (currently LightGBM), so a
-prediction interface only ever needs to load one file.
+**LightGBM ties the pole baseline on top-1 (68.8%) and improves on log
+loss (0.0738 vs 0.1040)** — with the caveat that 16 test races is a small
+enough sample that one or two different results would move these numbers
+several points either way; see "Validation" below for how much that tie
+actually means. XGBoost doesn't beat the baseline on any metric even
+after its own tuning budget. An ensemble isn't worth it: averaging in a
+model that underperforms the baseline would only drag LightGBM down, not
+complement it. `models/model.pkl` is a copy of whichever model wins on
+test log loss (currently LightGBM), so a prediction interface only ever
+needs to load one file.
 
 **Racecraft-tendency sanity check**: `driver_racecraft_avg_delta` ranks
-4th of 36 features by importance in LightGBM — high enough to ask whether
+4th of 35 features by importance in LightGBM — high enough to ask whether
 it's leaning on pre-2026 driver behavior that doesn't transfer to the new
 regs (exactly the risk flagged when this feature was built: it's
 career-long and deliberately not era-reset). The reassuring sign is that
@@ -246,5 +252,78 @@ the model still clearly beats the pole baseline on the 2026 test set
 despite that — if this feature's signal didn't transfer, test performance
 would be the place it would show up. One 16-race season isn't a strong
 guarantee either way, though; worth re-checking as more 2026+ data arrives.
+
+![](assets/section-divider.svg)
+
+## Validation
+
+```
+uv run python -m f1_predict.validate
+```
+
+A report-only pass on the LightGBM result, run before building a
+prediction interface on top of it — doesn't retrain or change
+`models/model.pkl`.
+
+**The top-1 tie with the pole baseline is mostly the model agreeing with
+pole, not out-predicting it.** Of LightGBM's 11 top-1 hits, all 11 are
+races the pole-sitter also won. Zero hits come from the model correctly
+picking a non-pole winner. Looking at the 5 misses, the model's pick
+matches the pole sitter in 3 of them too (it just didn't win that time);
+the other 2 are the only races where the model deviates from pole at all
+— and it's wrong both times:
+
+| Race | Model picked | Actual winner | Pole |
+| --- | --- | --- | --- |
+| 2026 R5 Canadian GP | RUS | ANT | RUS |
+| 2026 R7 Barcelona GP | RUS | HAM | RUS |
+| 2026 R9 British GP | ANT | LEC | ANT |
+| 2026 R13 Italian GP | VER | ANT | GAS |
+| 2026 R14 Spanish GP | VER | ANT | NOR |
+
+So LightGBM's top-1 call matches the literal pole sitter in 14 of 16
+races. The real value it adds over pole-picking shows up in log loss and
+top-3 (better-calibrated probability mass across the field), not in the
+single best guess.
+
+**Simple baselines, same 16 races** — a trivial single-feature model does
+better than LightGBM on one metric:
+
+| | top-1 | top-3 | log loss |
+| --- | --- | --- | --- |
+| LightGBM | 68.8% | 87.5% | 0.0738 |
+| Logistic regression (grid position only) | 68.8% | **93.8%** | 0.1371 |
+| "Winner is top-3 on the grid" rule | n/a | 93.8% | n/a |
+
+Grid position alone gets *more* top-3 hits (15/16) than LightGBM (14/16)
+— on 16 races that's a one-race difference, i.e. noise-level, but it's a
+real result, not something to round away. LightGBM's log loss is still
+clearly better (0.0738 vs 0.1371), meaning its probabilities are better
+calibrated even though the discrete top-3 pick doesn't always reflect it.
+
+**Walk-forward diagnostic** (train on everything strictly before each
+2026 race, predict only that race, using LightGBM's already-tuned
+hyperparameters — no re-tuning per fold): confirms the fixed-split result
+rather than undermining it.
+
+| | top-1 | top-3 | log loss |
+| --- | --- | --- | --- |
+| Fixed split (`evaluate.py`) | 68.8% | 87.5% | 0.0738 |
+| Walk-forward (this check) | 75.0% | 87.5% | 0.0744 |
+
+**Grid position's own importance rank**: 11th of 35 — present and used,
+but well behind `driver_circuit_avg_finish`, `driver_points_season_so_far`,
+`gap_to_pole_s`, and `driver_racecraft_avg_delta`. Given how closely the
+model's top-1 picks track pole above, this is a little surprising; it
+suggests the model's effective "trust qualifying" behavior is coming
+through `quali_position`/`gap_to_pole_s` more than through grid position
+specifically.
+
+**weather_rain_probability_pct was dropped** from the training feature
+list (not replaced): it's forecast-only, so it was 100% null across every
+row of the current, all-historical dataset — a column that's always null
+in training carries no signal to learn from. `weather_precip_mm` already
+exists in both the historical-actual and forecast paths and covers the
+same "how much rain" signal, so there was nothing to substitute it with.
 
 <img src="assets/checkered-flag.svg" width="70" alt="">
